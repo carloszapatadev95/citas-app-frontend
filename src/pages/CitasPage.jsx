@@ -1,101 +1,111 @@
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useContext, useCallback } from 'react';
+import { AuthContext } from '../context/AuthContext.jsx';
 import { ThemeContext } from '../context/ThemeContext.jsx';
 import { themeConfig } from '../theme/themeConfig.js';
-import * as citasService from '../services/citasService.js';
 import CitaForm from '../components/CitaForm.jsx';
+import { ModalContext } from '../context/ModalContext.jsx';
+import ModalWrapper from '../components/ModalWrapper.jsx'; // Importamos el componente del Modal
 
 function CitasPage() {
-    // Estado para la lista de citas, la carga y los errores
+    // --- ESTADOS ---
     const [citas, setCitas] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    
-    // Nuevo estado para gestionar la cita que se está editando
     const [citaSeleccionada, setCitaSeleccionada] = useState(null);
+    const [isModalOpen, setIsModalOpen] = useState(false); // Nuevo estado para el modal
 
+    // --- CONTEXTOS ---
+    const { apiClient, isAuthenticated } = useContext(AuthContext);
     const { theme } = useContext(ThemeContext);
     const styles = themeConfig[theme];
 
-    // Cargar las citas del backend cuando el componente se monta por primera vez
-    useEffect(() => {
-        cargarCitas();
-    }, []);
-
-    const cargarCitas = async () => {
+    // --- MANEJO DE DATOS ---
+    const cargarCitas = useCallback(async () => {
         try {
             setLoading(true);
             setError(null);
-            const response = await citasService.obtenerCitas();
-            // Ordenamos las citas por fecha para mostrar las más recientes primero
+            const response = await apiClient.get('/');
             const citasOrdenadas = response.data.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
             setCitas(citasOrdenadas);
         } catch (err) {
-            setError('No se pudieron cargar las citas. Asegúrate de que el servidor backend esté funcionando.');
+            setError('No se pudieron cargar las citas. Tu sesión puede haber expirado.');
             console.error(err);
         } finally {
             setLoading(false);
         }
-    };
+    }, [apiClient]);
 
-    // Función que se pasa al formulario para manejar la creación o actualización de una cita
-    const handleFormSubmit = async (datosCita) => {
-        try {
-            if (citaSeleccionada) {
-                // Si hay una cita seleccionada, estamos editando
-                await citasService.actualizarCita(citaSeleccionada.id, datosCita);
-            } else {
-                // Si no, estamos creando una nueva
-                await citasService.crearCita(datosCita);
-            }
-            // Reseteamos el estado de edición y recargamos la lista
-            setCitaSeleccionada(null);
+    useEffect(() => {
+        if (isAuthenticated) {
             cargarCitas();
-        } catch (err) {
-            console.error("Error al guardar la cita:", err);
-            throw err; // Propagamos el error para que el formulario lo muestre
+        } else {
+            setCitas([]);
+            setLoading(false);
         }
+    }, [isAuthenticated, cargarCitas]);
+
+    // --- MANEJO DE EVENTOS (HANDLERS) ---
+    const cerrarModal = () => {
+        setIsModalOpen(false);
+        setCitaSeleccionada(null); // Limpiar selección al cerrar
     };
     
-    // Función para manejar la eliminación de una cita
-    const handleEliminarCita = async (id) => {
+    const abrirModalCrear = () => {
+        setCitaSeleccionada(null);
+        setIsModalOpen(true);
+    };
+
+    const abrirModalEditar = (cita) => {
+        setCitaSeleccionada(cita);
+        setIsModalOpen(true);
+    };
+
+    const handleFormSubmit = useCallback(async (datosCita) => {
+        try {
+            if (citaSeleccionada) {
+                await apiClient.put(`/${citaSeleccionada.id}`, datosCita);
+            } else {
+                await apiClient.post('/', datosCita);
+            }
+            cerrarModal(); // Cierra el modal después de guardar
+            cargarCitas(); // Recarga la lista de citas
+        } catch (err) {
+            console.error("Error al guardar la cita:", err);
+            throw err; 
+        }
+    }, [apiClient, citaSeleccionada, cargarCitas]);
+
+    const handleEliminarCita = useCallback(async (id) => {
         if (window.confirm('¿Estás seguro de que quieres eliminar esta cita?')) {
             try {
-                await citasService.eliminarCita(id);
-                // Actualizamos el estado local para una respuesta de UI instantánea
-                setCitas(citas.filter(cita => cita.id !== id));
+                await apiClient.delete(`/${id}`);
+                setCitas(prevCitas => prevCitas.filter(cita => cita.id !== id));
             } catch (err) {
                 console.error("Error al eliminar la cita:", err);
                 alert("No se pudo eliminar la cita.");
             }
         }
-    };
-    
-    // Funciones para el flujo de edición
-    const handleEditarClick = (cita) => {
-        setCitaSeleccionada(cita);
-        // Hacemos scroll suave hacia la parte superior para que el usuario vea el formulario
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    };
+    }, [apiClient]);
 
-    const handleCancelarEdicion = () => {
-        setCitaSeleccionada(null);
-    };
-
-    // Renderizado condicional basado en el estado de carga y error
-    if (loading) return <div className="text-center p-10">Cargando citas...</div>;
+    // --- RENDERIZADO ---
+    if (loading) return <div className="text-center p-10">Cargando...</div>;
     if (error) return <div className="text-center p-10 text-red-500">{error}</div>;
 
     return (
         <div className="container mx-auto">
-            <h1 className={`text-4xl font-bold mb-8 text-center ${styles.text.primary}`}>
-                Gestor de Citas
-            </h1>
+            <div className="flex justify-between items-center mb-8 flex-wrap gap-4">
+                <h1 className={`text-4xl font-bold ${styles.text.primary}`}>
+                    Mis Citas
+                </h1>
+                <button
+                    onClick={abrirModalCrear}
+                    className={`py-2 px-5 rounded-lg font-semibold transition-transform transform hover:scale-105 ${styles.button.primary}`}
+                >
+                    + Nueva Cita
+                </button>
+            </div>
 
-            <CitaForm
-                onCitaSubmit={handleFormSubmit}
-                citaAEditar={citaSeleccionada}
-                onCancel={handleCancelarEdicion}
-            />
+            {/* El CitaForm ya no se renderiza aquí directamente */}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
                 {citas.length > 0 ? (
@@ -104,7 +114,6 @@ function CitasPage() {
                             <div className="flex-grow">
                                 <h3 className={`text-xl font-bold mb-2 ${styles.text.primary}`}>{cita.titulo}</h3>
                                 <p className={`text-sm mb-2 ${styles.text.secondary}`}>
-                                    {/* Formateamos la fecha a un formato más legible */}
                                     {new Date(cita.fecha).toLocaleString('es-ES', { dateStyle: 'long', timeStyle: 'short' })}
                                 </p>
                                 <p className={`mb-4 ${styles.text.secondary}`}>{cita.descripcion}</p>
@@ -117,7 +126,7 @@ function CitasPage() {
                                     Eliminar
                                 </button>
                                 <button
-                                    onClick={() => handleEditarClick(cita)}
+                                    onClick={() => abrirModalEditar(cita)}
                                     className={`py-1 px-3 text-sm rounded-lg focus:outline-none focus:ring-2 ${styles.button.primary}`}
                                 >
                                     Editar
@@ -126,9 +135,27 @@ function CitasPage() {
                         </div>
                     ))
                 ) : (
-                    <p className="col-span-full text-center mt-10">No hay citas agendadas. ¡Crea la primera!</p>
+                    <div className="col-span-full text-center mt-10 p-6 rounded-lg bg-white/50 dark:bg-slate-800/50">
+                        <p className={`${styles.text.primary} text-lg`}>No tienes citas agendadas.</p>
+                        <button onClick={abrirModalCrear} className="text-indigo-500 hover:underline mt-2 font-semibold">
+                            ¡Crea la primera!
+                        </button>
+                    </div>
                 )}
             </div>
+
+            {/* Renderizamos el Modal aquí, fuera del flujo principal */}
+            <ModalWrapper
+                isOpen={isModalOpen}
+                onRequestClose={cerrarModal}
+                title={citaSeleccionada ? 'Editar Cita' : 'Agendar Nueva Cita'}
+            >
+                <CitaForm
+                    onCitaSubmit={handleFormSubmit}
+                    citaAEditar={citaSeleccionada}
+                    onCancel={cerrarModal}
+                />
+            </ModalWrapper>
         </div>
     );
 }

@@ -30,6 +30,11 @@ export const themeConfig = {
       // Estilo para botones dentro del menú móvil (puede ser un caso especial)
       mobileMenu: 'bg-gray-200'
     },
+    modal: {
+      contentBg: '#ffffff', // bg-white
+      border: '1px solid #e5e7eb', // border-gray-200
+      titleColor: 'text-gray-900'
+    }
   },
   dark: {
     app: 'bg-gray-900 text-gray-100',
@@ -53,6 +58,11 @@ export const themeConfig = {
       icon: 'dark:hover:bg-gray-700',
       mobileMenu: 'dark:bg-gray-700'
     },
+    modal: {
+      contentBg: '#1f2937', // bg-gray-800
+      border: '1px solid #374151', // border-gray-700
+      titleColor: 'text-white'
+    }
   
   }
 };
