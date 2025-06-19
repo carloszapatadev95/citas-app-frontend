@@ -1,12 +1,11 @@
-// src/services/authService.js
 import axios from 'axios';
 
-const API_URL_AUTH = (import.meta.env.VITE_API_URL || 'http://localhost:4000').replace('/citas', '/auth');
-
-export const login = (email, password) => {
-    return axios.post(`${API_URL_AUTH}/login`, { email, password });
+export const login = (baseUrl, email, password) => {
+    // Construimos la URL completa para el endpoint de login
+    return axios.post(`${baseUrl}/api/auth/login`, { email, password });
 };
 
-export const register = (nombre, email, password) => {
-    return axios.post(`${API_URL_AUTH}/register`, { nombre, email, password });
+export const register = (baseUrl, nombre, email, password) => {
+    // Construimos la URL completa para el endpoint de registro
+    return axios.post(`${baseUrl}/api/auth/register`, { nombre, email, password });
 };

@@ -1,79 +1,84 @@
-// src/context/AuthContext.jsx
-import { createContext, useState, useEffect } from 'react';
+/* eslint-disable react-refresh/only-export-components */
+import { createContext, useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import * as authService from '../services/authService.js'; // Crearemos este servicio a continuación
+import * as authService from '../services/authService.js';
 
-// eslint-disable-next-line react-refresh/only-export-components
 export const AuthContext = createContext(null);
 
-// Creamos una instancia de Axios separada para el servicio de citas
-const apiClient = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || 'http://localhost:4000/api/citas'
-});
+// La URL base de la API, SIN NINGUNA RUTA ESPECÍFICA.
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
-// Interceptor para añadir el token a las peticiones de citas
-apiClient.interceptors.request.use(config => {
-    const token = localStorage.getItem('token');
-    
-    // --- AÑADIR ESTOS LOGS PARA DEPURAR ---
-    console.log("--- Interceptor de Axios ---");
-    if (token) {
-        console.log("Token encontrado en localStorage:", token.substring(0, 20) + "..."); // Mostramos solo una parte
-        config.headers.Authorization = `Bearer ${token}`;
-        console.log("Cabecera de Autorización añadida:", config.headers.Authorization.substring(0, 30) + "...");
-    } else {
-        console.log("No se encontró token en localStorage.");
-    }
-    console.log("----------------------------");
-    // --- FIN DE LOS LOGS ---
-
-    return config;
-}, error => {
-    // Esto es para errores antes de que la petición se envíe
-    return Promise.reject(error);
-});
-
-
-export const AuthProvider = ({ children }) => {
+function AuthProvider({ children }) {
+    const [token, setToken] = useState(() => localStorage.getItem('token'));
     const [usuario, setUsuario] = useState(null);
-    const [cargando, setCargando] = useState(true); // Para saber si estamos verificando el token inicial
+    const [cargando, setCargando] = useState(true);
 
-    // Al cargar la app, verifica si hay un token válido en localStorage
+    const apiClient = useMemo(() => {
+        const client = axios.create({
+            baseURL: `${API_BASE_URL}/api/citas`,
+        });
+
+        client.interceptors.request.use(
+            (config) => {
+                if (token) {
+                    config.headers.Authorization = `Bearer ${token}`;
+                }
+                return config;
+            },
+            (error) => Promise.reject(error)
+        );
+        
+        return client;
+    }, [token]);
+
+    // useEffect para validar el token inicial y establecer el estado del usuario.
     useEffect(() => {
-        const token = localStorage.getItem('token');
         if (token) {
-            // Aquí podrías añadir una lógica para verificar el token contra el backend
-            // Por ahora, asumimos que si hay token, el usuario está logueado.
-            // Una versión más robusta haría una petición a un endpoint /api/auth/profile
-            setUsuario({ token }); // Simplificado por ahora
+            try {
+                // --- CAMBIO AQUÍ: Decodificación manual ---
+                // 1. Separamos el token en sus 3 partes (header, payload, signature)
+                const payloadBase64 = token.split('.')[1];
+                // 2. Decodificamos la parte del payload, que está en base64
+                const decodedPayload = JSON.parse(atob(payloadBase64));
+                // 3. Establecemos el usuario con la información decodificada
+                setUsuario(decodedPayload);
+                // -----------------------------------------
+            } catch (error) {
+                console.error("Token inválido o malformado, limpiando...", error);
+                localStorage.removeItem('token');
+                setToken(null);
+                setUsuario(null);
+            }
         }
         setCargando(false);
-    }, []);
+    }, [token]);
 
     const login = async (email, password) => {
-        const response = await authService.login(email, password);
-        const { token } = response.data;
-        localStorage.setItem('token', token);
-        setUsuario({ token });
+        const response = await authService.login(API_BASE_URL, email, password);
+        const newToken = response.data.token;
+        localStorage.setItem('token', newToken);
+        setToken(newToken);
     };
 
     const register = async (nombre, email, password) => {
-        await authService.register(nombre, email, password);
+        await authService.register(API_BASE_URL, nombre, email, password);
     };
 
     const logout = () => {
         localStorage.removeItem('token');
+        setToken(null);
         setUsuario(null);
     };
 
     const value = {
-        usuario,
+        token,
+        usuario, // Ahora el objeto usuario contendrá { id, nombre, iat, exp }
         cargando,
-        isAuthenticated: !!usuario, // !! convierte un objeto/null a true/false
+        isAuthenticated: !!token,
         login,
         register,
         logout,
-        apiClient, // Exportamos la instancia de Axios configurada
+        apiClient,
     };
 
     return (
@@ -82,3 +87,5 @@ export const AuthProvider = ({ children }) => {
         </AuthContext.Provider>
     );
 };
+
+export { AuthProvider };
