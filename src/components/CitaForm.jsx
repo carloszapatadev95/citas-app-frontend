@@ -1,35 +1,59 @@
 // Archivo: src/components/CitaForm.jsx
-// Propósito: Formulario para crear y editar citas, ahora con manejo de zona horaria.
+// Propósito: Formulario para crear y editar citas, con manejo correcto de zonas horarias.
 
 import { useState, useEffect, useContext } from 'react';
 import { ThemeContext } from '../context/ThemeContext.jsx';
 import { themeConfig } from '../theme/themeConfig.js';
 
+/**
+ * Función auxiliar para convertir una fecha UTC (en formato string ISO)
+ * a un string que el input 'datetime-local' pueda mostrar en la hora local correcta.
+ */
+const formatISOToLocalInput = (isoString) => {
+    if (!isoString) return '';
+    
+    // 1. Crear un objeto Date a partir del string UTC. El objeto representará ese momento exacto en el tiempo.
+    const date = new Date(isoString);
+    
+    // 2. "Engañar" al formato ISO. Le restamos el desfase horario para que al generar el string,
+    // la hora coincida con la hora local del usuario.
+    // getTimezoneOffset() devuelve la diferencia en minutos (ej. 300 para UTC-5).
+    const userTimezoneOffset = date.getTimezoneOffset() * 60000; // en milisegundos
+    const localDate = new Date(date.getTime() - userTimezoneOffset);
+    
+    // 3. Convertir la fecha ajustada a un string ISO y cortar los segundos y milisegundos.
+    return localDate.toISOString().slice(0, 16);
+};
+
+
 function CitaForm({ onCitaSubmit, citaAEditar, onCancel }) {
-    // Estados para cada campo del formulario
     const [titulo, setTitulo] = useState('');
     const [fecha, setFecha] = useState('');
     const [descripcion, setDescripcion] = useState('');
     const [error, setError] = useState(null);
-    const [loading, setLoading] = useState(false); // Añadimos estado de carga
+    const [loading, setLoading] = useState(false);
 
     const { theme } = useContext(ThemeContext);
     const styles = themeConfig[theme];
     
     const modoEdicion = Boolean(citaAEditar);
 
-    // useEffect para rellenar el formulario cuando se edita una cita
+    // useEffect se ejecuta cuando 'citaAEditar' cambia.
     useEffect(() => {
         if (modoEdicion) {
             setTitulo(citaAEditar.titulo);
-            // La fecha viene del backend en formato UTC (string ISO).
-            // La convertimos a un objeto Date y luego la formateamos
-            // para que el input 'datetime-local' pueda mostrarla.
-            const fechaFormateada = new Date(citaAEditar.fecha).toISOString().slice(0, 16);
-            setFecha(fechaFormateada);
+            
+            // --- INICIO DE LA CORRECCIÓN ---
+            // Usamos nuestra nueva función para formatear la fecha UTC a la hora local del usuario
+            // para mostrarla correctamente en el input.
+            const fechaLocalParaInput = formatISOToLocalInput(citaAEditar.fecha);
+            setFecha(fechaLocalParaInput);
+            // --- FIN DE LA CORRECCIÓN ---
+            
             setDescripcion(citaAEditar.descripcion || '');
             setError(null);
         } else {
+            // Limpiar el formulario cuando no estamos en modo edición.
             setTitulo('');
             setFecha('');
             setDescripcion('');
@@ -37,7 +61,7 @@ function CitaForm({ onCitaSubmit, citaAEditar, onCancel }) {
     }, [citaAEditar, modoEdicion]);
 
 
-    // Maneja el envío del formulario
+    // Maneja el envío del formulario. Esta lógica ya era correcta.
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!titulo || !fecha) {
@@ -48,16 +72,11 @@ function CitaForm({ onCitaSubmit, citaAEditar, onCancel }) {
         setLoading(true);
         setError(null);
 
-        // --- INICIO DE LA CORRECCIÓN DE ZONA HORARIA ---
-        // El valor de 'fecha' del estado es un string como "2025-06-20T17:30".
-        // new Date(fecha) lo interpreta como la fecha y hora en la zona horaria LOCAL del navegador.
-        // .toISOString() la convierte a un string estándar universal en formato UTC.
-        // Ejemplo: "2025-06-20T22:30:00.000Z" (si estás en UTC-5)
+        // El valor de `fecha` del input es interpretado por `new Date()` como hora local.
+        // `.toISOString()` lo convierte correctamente a UTC para enviarlo al backend.
         const fechaUTC = new Date(fecha).toISOString();
-        // --- FIN DE LA CORRECCIÓN ---
 
         try {
-            // Enviamos la fecha en formato UTC al backend
             await onCitaSubmit({ titulo, fecha: fechaUTC, descripcion });
             
             if (!modoEdicion) {
