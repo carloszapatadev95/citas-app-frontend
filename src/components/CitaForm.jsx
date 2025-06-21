@@ -1,40 +1,35 @@
+// Archivo: src/components/CitaForm.jsx
+// Propósito: Formulario para crear y editar citas, ahora con manejo de zona horaria.
+
 import { useState, useEffect, useContext } from 'react';
 import { ThemeContext } from '../context/ThemeContext.jsx';
 import { themeConfig } from '../theme/themeConfig.js';
 
-/**
- * Componente de formulario para crear o editar una cita.
- * @param {object} props
- * @param {function} props.onCitaSubmit - Función que se llama al enviar el formulario.
- * @param {object|null} props.citaAEditar - Objeto de la cita a editar, o null si se está creando una nueva.
- * @param {function} props.onCancel - Función que se llama para cancelar el modo de edición.
- */
 function CitaForm({ onCitaSubmit, citaAEditar, onCancel }) {
-    // Estado para cada campo del formulario
+    // Estados para cada campo del formulario
     const [titulo, setTitulo] = useState('');
     const [fecha, setFecha] = useState('');
     const [descripcion, setDescripcion] = useState('');
     const [error, setError] = useState(null);
+    const [loading, setLoading] = useState(false); // Añadimos estado de carga
 
     const { theme } = useContext(ThemeContext);
     const styles = themeConfig[theme];
     
-    // Determina si el formulario está en modo de edición basándose en si existe 'citaAEditar'
     const modoEdicion = Boolean(citaAEditar);
 
-    // useEffect se ejecuta cuando 'citaAEditar' cambia. Rellena el formulario si estamos editando.
+    // useEffect para rellenar el formulario cuando se edita una cita
     useEffect(() => {
         if (modoEdicion) {
             setTitulo(citaAEditar.titulo);
-            // El input 'datetime-local' requiere un formato específico: YYYY-MM-DDTHH:mm
-            // new Date().toISOString() da un formato como "2024-08-15T10:00:00.000Z"
-            // .slice(0, 16) lo corta para que quede en el formato correcto.
+            // La fecha viene del backend en formato UTC (string ISO).
+            // La convertimos a un objeto Date y luego la formateamos
+            // para que el input 'datetime-local' pueda mostrarla.
             const fechaFormateada = new Date(citaAEditar.fecha).toISOString().slice(0, 16);
             setFecha(fechaFormateada);
             setDescripcion(citaAEditar.descripcion || '');
-            setError(null); // Limpia errores anteriores al empezar a editar
+            setError(null);
         } else {
-            // Si no estamos en modo edición, nos aseguramos de que el formulario esté limpio.
             setTitulo('');
             setFecha('');
             setDescripcion('');
@@ -44,27 +39,37 @@ function CitaForm({ onCitaSubmit, citaAEditar, onCancel }) {
 
     // Maneja el envío del formulario
     const handleSubmit = async (e) => {
-        e.preventDefault(); // Previene la recarga de la página
-
+        e.preventDefault();
         if (!titulo || !fecha) {
             setError('El título y la fecha son obligatorios.');
             return;
         }
+        
+        setLoading(true);
+        setError(null);
+
+        // --- INICIO DE LA CORRECCIÓN DE ZONA HORARIA ---
+        // El valor de 'fecha' del estado es un string como "2025-06-20T17:30".
+        // new Date(fecha) lo interpreta como la fecha y hora en la zona horaria LOCAL del navegador.
+        // .toISOString() la convierte a un string estándar universal en formato UTC.
+        // Ejemplo: "2025-06-20T22:30:00.000Z" (si estás en UTC-5)
+        const fechaUTC = new Date(fecha).toISOString();
+        // --- FIN DE LA CORRECCIÓN ---
 
         try {
-            // Llama a la función del padre para procesar los datos
-            await onCitaSubmit({ titulo, fecha, descripcion });
+            // Enviamos la fecha en formato UTC al backend
+            await onCitaSubmit({ titulo, fecha: fechaUTC, descripcion });
             
-            // Si creamos una cita nueva (no en modo edición), limpiamos el formulario
             if (!modoEdicion) {
                 setTitulo('');
                 setFecha('');
                 setDescripcion('');
             }
-            setError(null);
         } catch (err) {
             setError('No se pudo guardar la cita. Por favor, inténtalo de nuevo.');
             console.error(err);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -84,17 +89,19 @@ function CitaForm({ onCitaSubmit, citaAEditar, onCancel }) {
                         value={titulo}
                         onChange={(e) => setTitulo(e.target.value)}
                         className={`w-full p-2 border rounded-md outline-none focus:ring-2 focus:ring-indigo-500/50 ${styles.input}`}
+                        required
                     />
                 </div>
 
                 <div className="mb-4">
-                    <label htmlFor="fecha" className={`block mb-2 font-semibold ${styles.text.secondary}`}>Fecha y Hora</label>
+                    <label htmlFor="fecha" className={`block mb-2 font-semibold ${styles.text.secondary}`}>Fecha y Hora (Tu Hora Local)</label>
                     <input
                         id="fecha"
                         type="datetime-local"
                         value={fecha}
                         onChange={(e) => setFecha(e.target.value)}
                         className={`w-full p-2 border rounded-md outline-none focus:ring-2 focus:ring-indigo-500/50 ${styles.input}`}
+                        required
                     />
                 </div>
 
@@ -112,16 +119,18 @@ function CitaForm({ onCitaSubmit, citaAEditar, onCancel }) {
                 <div className="flex space-x-4 mt-4">
                     <button
                         type="submit"
-                        className={`w-full py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-opacity-75 ${styles.button.primary}`}
+                        disabled={loading}
+                        className={`w-full py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-opacity-75 ${styles.button.primary} ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                        {modoEdicion ? 'Guardar Cambios' : 'Agendar Cita'}
+                        {loading ? 'Guardando...' : (modoEdicion ? 'Guardar Cambios' : 'Agendar Cita')}
                     </button>
-                    {/* Botón de cancelar que solo aparece en modo edición */}
+                    
                     {modoEdicion && (
                         <button
                             type="button"
                             onClick={onCancel}
-                            className="w-full py-2 px-4 rounded-lg bg-gray-500 text-white hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400"
+                            disabled={loading}
+                            className={`w-full py-2 px-4 rounded-lg bg-gray-500 text-white hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400 ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
                             Cancelar
                         </button>
