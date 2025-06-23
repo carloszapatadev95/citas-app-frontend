@@ -12,6 +12,7 @@ import CitasPage from '../pages/CitasPage.jsx';
 import LoginPage from '../pages/LoginPage.jsx';
 import RegisterPage from '../pages/RegisterPage.jsx';
 import RutaProtegida from '../components/RutaProtegida.jsx';
+import SubscriptionPage from '../pages/SubscriptionPage.jsx';
 import App from '../App.jsx';
 
 // Creamos y exportamos el router directamente
@@ -28,11 +29,15 @@ const router = createBrowserRouter([
         { 
           index: true, // La ruta raíz ('/') ahora muestra WelcomePage
           element: <WelcomePage />,
+          
       },
       {
         path: 'citas', // La lista de citas ahora está en '/citas'
         element: <CitasPage />
     },
+     { path: 'subscribe',
+       element: <SubscriptionPage /> 
+      },
          
       ]
   },
