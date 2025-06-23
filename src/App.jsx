@@ -16,7 +16,7 @@ import PushNotificationManager from './components/PushNotificationManager.jsx';
 
 function App() {
   const { theme } = useContext(ThemeContext);
-  const { isAuthenticated, apiClient } = useContext(AuthContext); 
+  const { isAuthenticated, apiClient } = useContext(AuthContext);
   const { isModalOpen, citaAEditar, cerrarModal } = useContext(ModalContext);
 
   const styles = themeConfig[theme];
@@ -26,35 +26,36 @@ function App() {
   const handleFormSubmit = useCallback(async (datosCita) => {
     const isEditing = !!citaAEditar;
     const successMessage = `Cita ${isEditing ? 'actualizada' : 'creada'} exitosamente!`;
-    const errorMessage = `No se pudo ${isEditing ? 'actualizar' : 'crear'} la cita.`;
+    // const errorMessage = `No se pudo ${isEditing ? 'actualizar' : 'crear'} la cita.`;
 
     try {
-        if (isEditing) {
-            await apiClient.put(`/citas/${citaAEditar.id}`, datosCita);
-        } else {
-            await apiClient.post('/citas', datosCita);
-        }
-        
-        cerrarModal();
-        toast.success(successMessage); // <--- NOTIFICACIÓN DE ÉXITO
+      if (isEditing) {
+        await apiClient.put(`/citas/${citaAEditar.id}`, datosCita);
+      } else {
+        await apiClient.post('/citas', datosCita);
+      }
 
-        // Recargamos para ver los cambios. Es la solución simple por ahora.
-        // Una mejora futura sería usar un estado global o un sistema de caché.
-        if (window.location.pathname.includes('/citas')) {
-            setTimeout(() => window.location.reload(), 1500); // Pequeño delay para que el usuario vea el toast
-        }
-        
+      cerrarModal();
+      toast.success(successMessage); // <--- NOTIFICACIÓN DE ÉXITO
+
+      // Recargamos para ver los cambios. Es la solución simple por ahora.
+      // Una mejora futura sería usar un estado global o un sistema de caché.
+      if (window.location.pathname.includes('/citas')) {
+        setTimeout(() => window.location.reload(), 1500); // Pequeño delay para que el usuario vea el toast
+      }
+
     } catch (err) {
-        console.error("Error al guardar la cita:", err);
-        toast.error(errorMessage); // <--- NOTIFICACIÓN DE ERROR
-        throw err; // Re-lanzamos el error para que el formulario sepa que falló
+      console.error("Error al guardar la cita:", err);
+      const errorMessage = err.response?.data?.message || `No se pudo ${isEditing ? 'actualizar' : 'crear'} la cita.`;
+      toast.error(errorMessage); // <--- NOTIFICACIÓN DE ERROR
+
     }
   }, [apiClient, citaAEditar, cerrarModal]);
 
   return (
     <div className={`min-h-screen flex flex-col transition-colors duration-300 ${appContainerClasses}`}>
       {/* El componente Toaster renderiza todas las notificaciones creadas con toast() */}
-      <Toaster 
+      <Toaster
         position="top-right"
         toastOptions={{
           duration: 4000,
@@ -71,23 +72,23 @@ function App() {
       <main className="flex-grow container mx-auto px-4 pb-8" style={{ marginTop: '5rem' }}>
         <Outlet />
       </main>
-      
+
       {isAuthenticated && <PushNotificationManager />}
-      
+
       {/* El modal y su contenido, gestionado por el estado centralizado en App */}
       <ModalWrapper
-          isOpen={isModalOpen}
-          onRequestClose={cerrarModal}
-          title={citaAEditar ? 'Editar Cita' : 'Agendar Nueva Cita'}
+        isOpen={isModalOpen}
+        onRequestClose={cerrarModal}
+        title={citaAEditar ? 'Editar Cita' : 'Agendar Nueva Cita'}
       >
-          <CitaForm
-              onCitaSubmit={handleFormSubmit}
-              citaAEditar={citaAEditar}
-              onCancel={cerrarModal}
-          />
+        <CitaForm
+          onCitaSubmit={handleFormSubmit}
+          citaAEditar={citaAEditar}
+          onCancel={cerrarModal}
+        />
       </ModalWrapper>
 
-      <Footer/>
+      <Footer />
     </div>
   );
 }
